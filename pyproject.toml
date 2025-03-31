@@ -1,0 +1,23 @@
+[project]
+name = "asyncio-post"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Jeffrey04", email = "mycyberpet@yahoo.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "cytoolz>=1.0.1",
+    "funcparserlib>=1.0.1",
+    "httpx>=0.28.1",
+    "prompt-toolkit>=3.0.50",
+    "typer>=0.15.2",
+]
+
+[project.scripts]
+asyncio-post = "asyncio_post:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
