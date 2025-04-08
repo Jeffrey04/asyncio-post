@@ -13,6 +13,7 @@ class Command(Enum):
     DEX = auto()
     DEX_MULTI = auto()
     FIB = auto()
+    FIB_MULTI = auto()
     JOB = auto()
     KILL = auto()
     DASH = auto()
@@ -41,16 +42,19 @@ def grammar() -> Parser[Token, Expression]:
     fib = tok(Spec.COMMAND, "fib") + number >> (
         lambda elem: Expression(Command.FIB, (elem[1],))
     )
+    fib_multi = tok(Spec.COMMAND, "fib-multi") + many(number) >> (
+        lambda elem: Expression(Command.FIB_MULTI, elem[1])
+    )
     job = tok(Spec.COMMAND, "job") + number >> (
         lambda elem: Expression(Command.JOB, (elem[1],))
     )
     kill = tok(Spec.COMMAND, "kill") + number >> (
-        lambda elem: Expression(Command.KILL, (elem[1]))
+        lambda elem: Expression(Command.KILL, (elem[1],))
     )
     dash = tok(Spec.COMMAND, "dash") >> (lambda _: Expression(Command.DASH, ()))
     quit = tok(Spec.COMMAND, "quit") >> (lambda _: Expression(Command.QUIT, ()))
 
-    expression = dex | dex_multi | fib | job | kill | dash | quit
+    expression = dex | dex_multi | fib | fib_multi | job | kill | dash | quit
 
     return expression + finished >> (lambda elem: elem[0])
 

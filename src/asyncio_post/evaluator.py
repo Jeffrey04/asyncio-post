@@ -27,7 +27,7 @@ async def evaluate(
             return job(tasks[expression.args[0] - 1])
 
         case Expression(command=Command.KILL):
-            return kill(tasks[expression.args[0]] - 1)
+            return kill(tasks[expression.args[0] - 1])
 
         case Expression(command=Command.DASH):
             return dash(tasks)

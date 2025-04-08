@@ -1,31 +1,37 @@
 import asyncio
 import logging
+import multiprocessing
 import signal
-from collections.abc import Iterable
+from concurrent.futures import ProcessPoolExecutor
 from contextlib import suppress
 from dataclasses import dataclass
+from threading import Event
+from types import FrameType
 
 import httpx
-import typer
 from cytoolz.functoolz import thread_last
 from prompt_toolkit import PromptSession
+from typer import Typer
 
-from asyncio_post.evaluator import evaluate
+from asyncio_post.evaluator2 import evaluate
 from asyncio_post.lexer import TOKENIZER, tokenize
 from asyncio_post.parser import grammar, parse
 
-app = typer.Typer(pretty_exceptions_enable=False)
+app = Typer(pretty_exceptions_enable=False)
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 logging.basicConfig()
 
 
 @dataclass
 class ShutdownHandler:
+    exit_event: Event
     signal: int | None = None
 
     async def __call__(self) -> None:
         logger.info("Shutting down tasks. signal:%s", self.signal or "")
+
+        self.exit_event.set()
 
         tasks = tuple(
             task for task in asyncio.all_tasks() if task is not asyncio.current_task()
@@ -48,40 +54,26 @@ class ExceptionHandler:
         asyncio.create_task(self.shutdown_handler())
 
 
-def welcome_text() -> Iterable[str]:
-    return (
-        "Welcome to Sample Application",
-        "=============================",
-        "",
-        "Commands",
-        "========",
-        "dex <NUM>\t\t\tFetch pokemon <NUM> from pokedex",
-        "dex-multi <NUM> [<NUM>, ...]\tFetch multiple pokemons from pokedex",
-        "fib <NUM>\t\t\tFetch the <NUM>th fibonacci number",
-        "job <NUM>\t\t\tShow the output for submitted job",
-        "kill <NUM>\t\t\tKill the submitted job",
-        "dash\t\t\t\tShow a summary of submitted tasks",
-        "quit\t\t\t\tQuit this application",
-        "",
-    )
-
-
-def init() -> None:
+def init(exit_event: Event) -> None:
     loop = asyncio.get_running_loop()
 
     for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
-        handler = ShutdownHandler(sig)
+        handler = ShutdownHandler(exit_event, sig)
 
         loop.add_signal_handler(sig, lambda: asyncio.create_task(handler()))
 
-    loop.set_exception_handler(ExceptionHandler(ShutdownHandler()))
+    loop.set_exception_handler(ExceptionHandler(ShutdownHandler(exit_event)))
 
 
 async def repl() -> None:
-    with suppress(asyncio.CancelledError):
-        init()
+    with (
+        ProcessPoolExecutor(max_workers=5) as executor,
+        suppress(asyncio.CancelledError),
+    ):
+        manager = multiprocessing.Manager()
+        exit_event = manager.Event()
 
-        print("\n".join(welcome_text()))
+        init(exit_event)
 
         t, g = TOKENIZER, grammar()
         session = PromptSession()
@@ -96,10 +88,22 @@ async def repl() -> None:
                     line,
                     (tokenize, t),
                     (parse, g),
-                    (evaluate, client, tasks, ShutdownHandler()),
+                    (
+                        evaluate,
+                        client,
+                        executor,
+                        exit_event,
+                        manager,
+                        tasks,
+                        ShutdownHandler(exit_event),
+                    ),
                 ):
+                    case (_, asyncio.Future()):
+                        tasks.append((line, *result))
+                        print(f"Task {len(tasks)} is submitted")
+
                     case asyncio.Task():
-                        tasks.append((line, result))
+                        tasks.append((line, None, result))
                         print(f"Task {len(tasks)} is submitted")
 
                     case _:

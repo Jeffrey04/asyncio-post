@@ -1,6 +1,8 @@
 import asyncio
 import logging
+import time
 from itertools import count
+from threading import Event
 
 import httpx
 from cytoolz.functoolz import memoize
@@ -30,34 +32,19 @@ async def dex_multi(client: httpx.AsyncClient, *ids: int) -> str:
         logger.info("cancelling")
 
 
-@memoize
-def fibonacci(nth: int) -> int:
-    assert nth > 0
-
-    result = ()
-
-    for i in count(1):
-        match i:
-            case 1:
-                result = (0,)
-
-            case 2:
-                result += (1,)
-
-            case _:
-                result = result[1:] + (sum(result),)
-
-    assert len(result) > 0
-
-    return result[-1]
-
-
-def fib(nth: int) -> str:
+def fib(
+    nth: int, exit_event: Event | None = None, cancel_event: Event | None = None
+) -> str:
     assert isinstance(nth, int) and nth > 0
 
     result = ()
 
     for i in range(1, nth + 1):
+        if (exit_event and exit_event.is_set()) or (
+            cancel_event and cancel_event.is_set()
+        ):
+            return "Cancelled"
+
         match i:
             case 1:
                 result = (0,)
